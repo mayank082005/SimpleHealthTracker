@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Health Tracker</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        .container {
+            background-color: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: #666;
+        }
+        input, textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            display: block;
+            width: 100%;
+            padding: 10px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-top: 15px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        #connectWallet {
+            background-color: #2196F3;
+        }
+        #connectWallet:hover {
+            background-color: #1976D2;
+        }
+        #healthMetrics {
+            margin-top: 30px;
+        }
+        .metric-item {
+            background-color: #f9f9f9;
+            border: 1px solid #e0e0e0;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+        }
+        #errorMessage {
+            color: red;
+            margin-top: 15px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Simple Health Tracker</h1>
+        
+        <button id="connectWallet">Connect Wallet</button>
+        
+        <div id="healthTrackerForm" style="display: none;">
+            <form id="addHealthMetricForm">
+                <div class="form-group">
+                    <label for="weight">Weight (kg):</label>
+                    <input type="number" id="weight" required min="0" max="500" step="0.1">
+                </div>
+                <div class="form-group">
+                    <label for="systolic">Systolic Blood Pressure:</label>
+                    <input type="number" id="systolic" required min="0" max="300">
+                </div>
+                <div class="form-group">
+                    <label for="diastolic">Diastolic Blood Pressure:</label>
+                    <input type="number" id="diastolic" required min="0" max="200">
+                </div>
+                <div class="form-group">
+                    <label for="heartRate">Heart Rate (bpm):</label>
+                    <input type="number" id="heartRate" required min="0" max="250">
+                </div>
+                <div class="form-group">
+                    <label for="bloodSugar">Blood Sugar (mg/dL):</label>
+                    <input type="number" id="bloodSugar" required min="0" max="1000">
+                </div>
+                <div class="form-group">
+                    <label for="notes">Notes:</label>
+                    <textarea id="notes" rows="3"></textarea>
+                </div>
+                <button type="submit">Add Health Metric</button>
+            </form>
+        </div>
+        
+        <div id="errorMessage"></div>
+        
+        <div id="healthMetrics">
+            <h2>Your Health Metrics</h2>
+            <button id="fetchMetrics">Fetch Metrics</button>
+            <div id="metricsList"></div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/web3@1.5.2/dist/web3.min.js"></script>
+    <script>
+        // Contract ABI and Address (replace with your actual deployed contract details)
+        const contractABI = [
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "_weight",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "_systolic",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "_diastolic",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "_heartRate",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "_bloodSugar",
+				"type": "uint256"
+			},
+			{
+				"internalType": "string",
+				"name": "_notes",
+				"type": "string"
+			}
+		],
+		"name": "addHealthMetric",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "deleteLatestHealthMetric",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": true,
+				"internalType": "address",
+				"name": "user",
+				"type": "address"
+			},
+			{
+				"indexed": false,
+				"internalType": "uint256",
+				"name": "timestamp",
+				"type": "uint256"
+			}
+		],
+		"name": "HealthMetricAdded",
+		"type": "event"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": true,
+				"internalType": "address",
+				"name": "user",
+				"type": "address"
+			},
+			{
+				"indexed": false,
+				"internalType": "uint256",
+				"name": "timestamp",
+				"type": "uint256"
+			}
+		],
+		"name": "HealthMetricDeleted",
+		"type": "event"
+	},
+	{
+		"inputs": [],
+		"name": "getHealthMetrics",
+		"outputs": [
+			{
+				"components": [
+					{
+						"internalType": "uint256",
+						"name": "timestamp",
+						"type": "uint256"
+					},
+					{
+						"internalType": "uint256",
+						"name": "weight",
+						"type": "uint256"
+					},
+					{
+						"internalType": "uint256",
+						"name": "bloodPressureSystolic",
+						"type": "uint256"
+					},
+					{
+						"internalType": "uint256",
+						"name": "bloodPressureDiastolic",
+						"type": "uint256"
+					},
+					{
+						"internalType": "uint256",
+						"name": "heartRate",
+						"type": "uint256"
+					},
+					{
+						"internalType": "uint256",
+						"name": "bloodSugar",
+						"type": "uint256"
+					},
+					{
+						"internalType": "string",
+						"name": "notes",
+						"type": "string"
+					}
+				],
+				"internalType": "struct SimpleHealthTracker.HealthMetric[]",
+				"name": "",
+				"type": "tuple[]"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "getHealthMetricsCount",
+		"outputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "getLatestHealthMetric",
+		"outputs": [
+			{
+				"components": [
+					{
+						"internalType": "uint256",
+						"name": "timestamp",
+						"type": "uint256"
+					},
+					{
+						"internalType": "uint256",
+						"name": "weight",
+						"type": "uint256"
+					},
+					{
+						"internalType": "uint256",
+						"name": "bloodPressureSystolic",
+						"type": "uint256"
+					},
+					{
+						"internalType": "uint256",
+						"name": "bloodPressureDiastolic",
+						"type": "uint256"
+					},
+					{
+						"internalType": "uint256",
+						"name": "heartRate",
+						"type": "uint256"
+					},
+					{
+						"internalType": "uint256",
+						"name": "bloodSugar",
+						"type": "uint256"
+					},
+					{
+						"internalType": "string",
+						"name": "notes",
+						"type": "string"
+					}
+				],
+				"internalType": "struct SimpleHealthTracker.HealthMetric",
+				"name": "",
+				"type": "tuple"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	}
+];
+        const contractAddress = '0x9e2bBF8Cd2E7492fd02f2780285E82E62b78bF57'; // Replace with actual contract address
+
+        // DOM Elements
+        const connectWalletBtn = document.getElementById('connectWallet');
+        const healthTrackerForm = document.getElementById('healthTrackerForm');
+        const addHealthMetricForm = document.getElementById('addHealthMetricForm');
+        const fetchMetricsBtn = document.getElementById('fetchMetrics');
+        const metricsListDiv = document.getElementById('metricsList');
+        const errorMessageDiv = document.getElementById('errorMessage');
+
+        let web3;
+        let contract;
+        let userAccount;
+
+        // Connect Wallet
+        async function connectWallet() {
+            if (window.ethereum) {
+                try {
+                    // Request account access
+                    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+                    userAccount = accounts[0];
+                    
+                    // Initialize Web3
+                    web3 = new Web3(window.ethereum);
+                    
+                    // Create contract instance
+                    contract = new web3.eth.Contract(contractABI, contractAddress);
+                    
+                    // Show health tracker form
+                    connectWalletBtn.style.display = 'none';
+                    healthTrackerForm.style.display = 'block';
+                    
+                    // Show connected account
+                    errorMessageDiv.textContent = `Connected: ${userAccount}`;
+                } catch (error) {
+                    errorMessageDiv.textContent = `Connection failed: ${error.message}`;
+                }
+            } else {
+                errorMessageDiv.textContent = 'Please install MetaMask!';
+            }
+        }
+
+        // Add Health Metric
+        async function addHealthMetric(event) {
+            event.preventDefault();
+            
+            try {
+                // Collect form data
+                const weight = document.getElementById('weight').value;
+                const systolic = document.getElementById('systolic').value;
+                const diastolic = document.getElementById('diastolic').value;
+                const heartRate = document.getElementById('heartRate').value;
+                const bloodSugar = document.getElementById('bloodSugar').value;
+                const notes = document.getElementById('notes').value;
+                
+                // Send transaction
+                await contract.methods.addHealthMetric(
+                    web3.utils.toBN(weight * 10), // Convert to uint256, handle decimal
+                    web3.utils.toBN(systolic), 
+                    web3.utils.toBN(diastolic), 
+                    web3.utils.toBN(heartRate), 
+                    web3.utils.toBN(bloodSugar), 
+                    notes
+                ).send({ from: userAccount });
+                
+                // Clear form and show success message
+                addHealthMetricForm.reset();
+                errorMessageDiv.textContent = 'Health metric added successfully!';
+            } catch (error) {
+                errorMessageDiv.textContent = `Error adding health metric: ${error.message}`;
+            }
+        }
+
+        // Fetch Health Metrics
+        async function fetchHealthMetrics() {
+            try {
+                // Call contract method to get metrics
+                const metrics = await contract.methods.getHealthMetrics().call({ from: userAccount });
+                
+                // Clear previous metrics
+                metricsListDiv.innerHTML = '';
+                
+                // Display metrics
+                metrics.forEach((metric, index) => {
+                    const metricDiv = document.createElement('div');
+                    metricDiv.classList.add('metric-item');
+                    
+                    // Convert timestamp to readable date
+                    const date = new Date(metric.timestamp * 1000).toLocaleString();
+                    
+                    // Convert weight back to decimal (was multiplied by 10)
+                    const weight = parseFloat(metric.weight) / 10;
+                    
+                    metricDiv.innerHTML = `
+                        <h3>Metric #${index + 1}</h3>
+                        <p><strong>Date:</strong> ${date}</p>
+                        <p><strong>Weight:</strong> ${weight.toFixed(1)} kg</p>
+                        <p><strong>Blood Pressure:</strong> ${metric.bloodPressureSystolic}/${metric.bloodPressureDiastolic} mmHg</p>
+                        <p><strong>Heart Rate:</strong> ${metric.heartRate} bpm</p>
+                        <p><strong>Blood Sugar:</strong> ${metric.bloodSugar} mg/dL</p>
+                        <p><strong>Notes:</strong> ${metric.notes}</p>
+                    `;
+                    
+                    metricsListDiv.appendChild(metricDiv);
+                });
+            } catch (error) {
+                errorMessageDiv.textContent = `Error fetching health metrics: ${error.message}`;
+            }
+        }
+
+        // Event Listeners
+        connectWalletBtn.addEventListener('click', connectWallet);
+        addHealthMetricForm.addEventListener('submit', addHealthMetric);
+        fetchMetricsBtn.addEventListener('click', fetchHealthMetrics);
+
+        // Handle network changes
+        if (window.ethereum) {
+            window.ethereum.on('accountsChanged', (accounts) => {
+                if (accounts.length === 0) {
+                    // Wallet disconnected
+                    connectWalletBtn.style.display = 'block';
+                    healthTrackerForm.style.display = 'none';
+                    errorMessageDiv.textContent = 'Wallet disconnected';
+                } else {
+                    // Reload the page to reset the connection
+                    window.location.reload();
+                }
+            });
+        }
+    </script>
+</body>
+</html>
